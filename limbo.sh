@@ -10,70 +10,47 @@
 #
 
 function tcr() {
-  # Run tests and return their status
   dotnet test
-  return $?
+  if [ $? -eq 0 ]; then
+    git add -A
+    git commit -m "TCR"
+  else
+    git checkout HEAD -- .
+  fi
 }
 
 function pull_rebase() {
-  # Pull and rebase changes from the remote repository
   git pull --rebase
 }
 
 function push_changes() {
-  # Push changes to the remote repository
   git push
 }
 
-function handle_conflict() {
-  echo "Merge conflict detected. Please resolve the conflict and then run './limbo.sh continue'."
-}
-
-function handle_test_fail() {
-  echo "Tests failed after pulling changes. Please fix the tests before proceeding."
-}
-
-function handle_push_error() {
-  echo "Failed to push changes. Another push occurred in between. Retrying the process."
-}
-
-if [ "$1" == "continue" ]; then
+while true; do
   tcr
-  if [ $? -eq 0 ]; then
-    pull_rebase
-    if [ $? -eq 0 ]; then
-      tcr
-      if [ $? -eq 0 ]; then
-        push_changes || handle_push_error && exit 0
-      else
-        handle_test_fail
-        exit 1
-      fi
-    else
-      handle_conflict
-      exit 1
-    fi
-  else
-    exit 1
+  if [ $? -ne 0 ]; then
+    break
   fi
-else
+
+  pull_rebase
+  if [ $? -ne 0 ]; then
+    echo "Merge conflict detected. Please resolve the conflict and then run './limbo.sh continue'."
+    break
+  fi
+
   tcr
-  if [ $? -eq 0 ]; then
-    pull_rebase
-    if [ $? -eq 0 ]; then
-      tcr
-      if [ $? -eq 0 ]; then
-        push_changes || handle_push_error && exit 0
-      else
-        handle_test_fail
-        exit 1
-      fi
-    else
-      handle_conflict
-      exit 1
-    fi
-  else
-    exit 1
+  if [ $? -ne 0 ]; then
+    echo "Tests failed after pulling changes. Please fix the tests before proceeding."
+    break
   fi
-fi
+
+  push_changes
+  if [ $? -ne 0 ]; then
+    echo "Failed to push changes. Another push occurred in between. Retrying the process."
+    continue
+  else
+    break
+  fi
+done
 
